@@ -990,7 +990,39 @@ app.post("/books/:bookId/borrow", async (req, res) => {
 
 ## Complete Error Flow Diagram
 
-![Complete Error Flow Diagram](./diagram-dark.svg)
+```mermaid
+flowchart TD
+    A["HTTP Request: POST /books/book-123/borrow<br/>{ userId: 'user-456' }"]
+    subgraph Presentation Layer
+      B["Route Handler<br/>• Validates JWT token<br/>• Creates input object<br/>• Calls workflow"]
+    end
+    subgraph Application Layer
+      direction TB
+      C["BorrowBookWorkflow.execute()<br/>1. Validate input schema<br/>2. Load book, user, count in parallel<br/>3. Check Option.none: BookNotFoundError?<br/>4. Check Option.none: UserNotFoundError?"]
+    end
+    subgraph Domain Layer
+      D["user.canBorrowMoreBooks(3)"]
+      E(["✗ FAILS: BorrowLimitExceededError<br/>{ userId: 'user-456',<br/>currentCount: 3,<br/>maxAllowed: 3 }"])
+    end
+    subgraph Error bubbles up
+      F["Error Bubbles Up Through Effect Chain"]
+    end
+    subgraph Presentation Layer [Presentation Layer]
+      G["mapErrorToHttp(BorrowLimitExceededError)<br/>{<br/> status: 409,<br/> error: 'Conflict',<br/> message: 'User has reached maximum...'<br/> details: { userId, currentCount, maxAllowed }<br/>}"]
+    end
+    H["HTTP Response 409"]
+    A --> B
+    B --> C
+    C -->|ParseError?| F1[/"ParseError"/] -.-> F
+    C -->|BookNotFoundError?| F2[/"BookNotFoundError"/] -.-> F
+    C -->|UserNotFoundError?| F3[/"UserNotFoundError"/] -.-> F
+    C --> D
+    D -- "BorrowLimitExceededError" --> E
+    E --> F
+    F --> G
+    G --> H
+
+```
 
 ---
 
